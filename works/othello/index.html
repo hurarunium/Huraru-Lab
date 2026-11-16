@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>オセロのAI - huraru-lab</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0f0f12;
+    --card-bg: #1a1a1f;
+    --border: #2c2c33;
+    --text: #e8e8ec;
+    --muted: #9a9aa5;
+    --accent: #7dd3fc;
+    --board: #1f5f3f;
+    --board-line: #0f3a26;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, "Segoe UI", "Hiragino Sans", "Yu Gothic", sans-serif;
+    display: flex;
+    justify-content: center;
+    padding: 16px;
+  }
+  .layout {
+    display: flex;
+    gap: 20px;
+    align-items: flex-start;
+    width: 100%;
+    max-width: 860px;
+  }
+
+  /* --- 盤面 --- */
+  /* 盤面は最大520px。幅が足りないときは盤面のほうを縮め、設定パネルは260px以上を保つ */
+  .board-area { flex: 0 1 520px; min-width: 0; }
+  .board {
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    gap: 2px;
+    padding: 2px;
+    width: 100%;
+    aspect-ratio: 1;
+    background: var(--board-line);
+    border-radius: 6px;
+    touch-action: manipulation;
+  }
+  .cell {
+    position: relative;
+    background: var(--board);
+    border: none;
+    padding: 0;
+    cursor: default;
+  }
+  .cell.last { background: #2d7a52; }
+  .cell.legal { cursor: pointer; }
+  .cell.legal::after {
+    content: "";
+    position: absolute;
+    inset: 38%;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.28);
+  }
+  .cell.legal:hover::after { background: rgba(125, 211, 252, 0.7); }
+  .stone {
+    position: absolute;
+    inset: 9%;
+    border-radius: 50%;
+  }
+  .stone.black { background: radial-gradient(circle at 35% 30%, #4a4a52, #08080a 70%); }
+  .stone.white { background: radial-gradient(circle at 35% 30%, #ffffff, #c9c9d0 75%); }
+
+  /* --- 情報と設定 --- */
+  .panel { flex: 1 0 260px; min-width: 0; display: flex; flex-direction: column; gap: 14px; }
+  .card {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 16px;
+  }
+  .card h2 { font-size: 0.8rem; color: var(--muted); font-weight: normal; margin: 0 0 10px; }
+  .score { display: flex; gap: 18px; font-size: 1.1rem; }
+  .score span { display: inline-flex; align-items: center; gap: 6px; }
+  .dot { width: 14px; height: 14px; border-radius: 50%; display: inline-block; }
+  .dot.black { background: #08080a; border: 1px solid #555; }
+  .dot.white { background: #f2f2f5; }
+  .status { margin-top: 10px; min-height: 2.6em; color: var(--text); font-size: 0.9rem; line-height: 1.4; }
+  .status.thinking::after {
+    content: "";
+    display: inline-block;
+    width: 0.8em;
+    height: 0.8em;
+    margin-left: 6px;
+    border: 2px solid var(--accent);
+    border-right-color: transparent;
+    border-radius: 50%;
+    vertical-align: -0.1em;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .field { margin-bottom: 12px; }
+  .field > label, .field > .label { display: block; font-size: 0.75rem; color: var(--muted); margin-bottom: 6px; }
+  .field select {
+    width: 100%;
+    padding: 0.45rem 0.5rem;
+    background: #0f0f12;
+    color: var(--text);
+    border: 1px solid #3a3a45;
+    border-radius: 4px;
+    font: inherit;
+    font-size: 0.9rem;
+  }
+  .choices { display: flex; gap: 14px; font-size: 0.9rem; }
+  .choices label { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; }
+  button.start {
+    width: 100%;
+    padding: 0.6rem 0.8rem;
+    border-radius: 4px;
+    border: 1px solid var(--accent);
+    background: rgba(20, 20, 26, 0.8);
+    color: var(--text);
+    font: inherit;
+    font-size: 0.95rem;
+    cursor: pointer;
+  }
+  button.start:hover:not(:disabled) { background: rgba(125, 211, 252, 0.15); }
+  button.start:disabled { opacity: 0.5; cursor: default; }
+  .hint { margin-top: 8px; font-size: 0.72rem; color: var(--muted); line-height: 1.5; }
+
+  /* スマホの幅: 盤面を幅いっぱいにして、設定を下に置く */
+  @media (max-width: 720px) {
+    body { padding: 12px; }
+    .layout { flex-direction: column; align-items: stretch; gap: 14px; }
+    .board-area { width: 100%; }
+  }
+
+  /* ふらるラボの一覧のプレビュー(iframe の中)では、設定を隠し、盤面だけを枠の中央に収める。
+     スマホの幅の指定より後ろに置き、そちらを上書きする */
+  .embedded body { padding: 0; height: 100vh; overflow: hidden; align-items: center; }
+  .embedded .panel { display: none; }
+  .embedded .layout { flex-direction: row; justify-content: center; }
+  .embedded .board-area { flex: none; width: min(100vw, 100vh); }
+  .embedded .board { border-radius: 0; }
+</style>
+</head>
+<body>
+<div class="layout">
+  <div class="board-area">
+    <div class="board" id="board" aria-label="オセロの盤面"></div>
+  </div>
+  <div class="panel">
+    <div class="card">
+      <div class="score">
+        <span><i class="dot black"></i><b id="black-count">2</b></span>
+        <span><i class="dot white"></i><b id="white-count">2</b></span>
+      </div>
+      <div class="status" id="status" role="status">設定を選んで「ゲーム開始」を押してください</div>
+    </div>
+    <div class="card">
+      <h2>ゲーム設定</h2>
+      <div class="field">
+        <span class="label">あなたの手番</span>
+        <div class="choices">
+          <label><input type="radio" name="turn" value="black" checked> 先攻(黒)</label>
+          <label><input type="radio" name="turn" value="white"> 後攻(白)</label>
+        </div>
+      </div>
+      <div class="field">
+        <label for="level">AIのレベル</label>
+        <select id="level"></select>
+      </div>
+      <button class="start" id="start">ゲーム開始</button>
+      <p class="hint">レベルNのAIは、中盤でN手先まで読み、終盤は残り2Nマス(最大20マス)から最後まで読み切ります。高いレベルは1手に数秒かかることがあります。<br>初めて開始するときに、AI(約9MB)を読み込みます。</p>
+    </div>
+  </div>
+</div>
+<script type="module" src="game.js"></script>
+</body>
+</html>

@@ -14,5 +14,13 @@
     "createdDate": "2026-07-24",
     "updatedDates": ["2026-07-25"],
     "note": "3Dモデルを頂点を粒子として描画する"
+  },
+  {
+    "slug": "othello",
+    "title": "オセロのAI",
+    "technology": ["C#", "WebAssembly", "Web Worker"],
+    "createdDate": "2026-11-16",
+    "updatedDates": ["2026-11-16"],
+    "note": "デスクトップ版と同じC#の強いAIを、WebAssemblyでブラウザで動かす"
   }
 ]
